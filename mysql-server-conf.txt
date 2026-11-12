@@ -1,0 +1,122 @@
+# MySQL Server Configuration
+# Tested on MySQL 8.0 - production environment {Keep in mind you have to tune values as per resources on your database server}
+# Place at /etc/my.cnf or /etc/mysql/my.cnf
+
+[client]
+# Socket path used by all client tools (mysql, mysqldump, etc.)
+socket = /data/mysql.sock
+
+[mysqld]
+# ---------- General / Paths ----------
+datadir                = /data/
+socket                 = /data/mysql.sock
+pid-file               = /var/run/mysqld/mysqld.pid
+tmpdir                 = /data/tmp
+secure_file_priv       = /data/mysql-files/
+bind-address           = 0.0.0.0
+
+# Error log - keep this on a persistent volume
+log_error              = /var/log/mysql/mysqld.log
+log_error_verbosity    = 1
+
+# General query log (enable only when debugging - it eats disk fast)
+general_log_file       = /data/log-filelocation.log
+
+# Slow query log
+slow_query_log         = 1
+slow_query_log_file    = /data/<HOSTNAME>-slow.log
+slow_launch_time       = 1
+
+# X Protocol socket (used by mysqlx clients / X DevAPI)
+mysqlx_socket          = /data/mysqlx.sock
+
+# ---------- Server Identity ----------
+# Unique ID for replication topology - MUST be unique per node
+server_id = 59
+
+# ---------- Replication (GTID based) ----------
+gtid_mode                        = ON
+enforce_gtid_consistency         = ON
+master_info_repository           = TABLE
+relay_log_info_repository        = TABLE
+binlog_checksum                  = NONE
+log_slave_updates                = ON
+binlog_format                    = ROW
+
+relay_log                        = /data/<HOSTNAME>-relay-bin
+relay-log-index                  = /data/<HOSTNAME>-relay-bin.index
+replica_load_tmpdir              = /data/tmp
+slave_load_tmpdir                = /data/tmp
+
+replica_parallel_type            = LOGICAL_CLOCK
+replica_parallel_workers         = 8
+replica-preserve-commit-order    = 1
+slave_max_allowed_packet         = 1G
+slave_pending_jobs_size_max      = 1G
+
+# Errors we knowingly skip - only use these if you understand each code.
+# 1062=dup key, 1032=row not found, 1050=table exists, 1049=db missing,
+# 3101=plugin error, 1782=gtid error, 1061=dup key name
+slave_skip_errors                = 1062,1032,1050,1049,3101,1782,1061
+
+# Binlog
+log-bin                          = /data/binlog
+log-bin-index                    = /data/binlog.index
+max_binlog_size                  = 1024M
+binlog_transaction_dependency_tracking = WRITESET
+
+# Retention - 3 days is fine for most workloads, extend if replicas lag
+expire_logs_days                 = 3
+
+# ---------- Auto-increment ----------
+# Set per node so multi-primary / circular replication doesn't collide.
+# This node is offset 3 of 4.
+auto_increment_increment = 4
+auto_increment_offset    = 3
+
+# ---------- SQL mode / transaction ----------
+sql-mode                = "STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION"
+transaction_isolation   = 'READ-COMMITTED'
+
+# ---------- Connections ----------
+max_connections         = 25000
+max_connect_errors      = 1000
+max_allowed_packet      = 1G
+thread_stack            = 512K
+thread_cache_size       = 1024
+
+# ---------- Temp tables / buffers ----------
+bulk_insert_buffer_size = 64M
+tmp_table_size          = 2G
+max_heap_table_size     = 2G
+table_open_cache        = 3000
+table_definition_cache  = 2000
+
+# ---------- InnoDB ----------
+# Buffer pool should be ~70% of RAM on a dedicated DB box
+innodb_buffer_pool_size              = 70G
+innodb_log_buffer_size               = 256M
+innodb_log_file_size                 = 2G
+
+# I/O tuning for NVMe/SSD - trim these down for spinning disks
+innodb_io_capacity                   = 50000
+innodb_io_capacity_max               = 100000
+innodb_write_io_threads              = 256
+innodb_read_io_threads               = 256
+innodb_lru_scan_depth                = 256
+innodb_flush_method                  = O_DIRECT
+innodb_flush_neighbors               = 1
+
+# NOTE: 0 is risky - on crash you can lose ~1s of committed txns.
+# Use 1 for real durability; 2 is a middle ground.
+innodb_flush_log_at_trx_commit       = 0
+
+innodb_rollback_on_timeout           = ON
+innodb_online_alter_log_max_size     = 1G
+innodb_print_all_deadlocks           = ON
+
+[mysqldump]
+quick
+quote-names
+max_allowed_packet = 1G
+
